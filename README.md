@@ -1,98 +1,50 @@
 # CellSense
 
-A terminal AI agent for asking natural language questions about Excel and CSV files.
+A terminal AI agent for asking natural-language questions about Excel and CSV files.
+It plans queries, runs tools (filter, aggregate, join, plot, file discovery) over your
+data, and answers with row-level citations.
 
 ## Setup
 
 ```bash
-# Clone and enter the directory
-cd cellsense
-
-# Create and activate virtual environment
 python3.11 -m venv .venv
 source .venv/bin/activate
-
-# Install dependencies
 pip install -r requirements.txt
 ```
 
-## Choosing an agent
+Add an API key for the backend you want (env var or a `.env` file in the project root):
 
-CellSense supports two LLM backends, selected with the `--agent` flag.
+| `--agent`           | Default model             | Key                 |
+| ------------------- | ------------------------- | ------------------- |
+| `llama` *(default)* | `Llama-3.3-70B-Instruct`  | `LLAMA_API_KEY`     |
+| `groq`              | `llama-3.3-70b-versatile` | `GROQ_API_KEY`      |
+| `gemini`            | `gemini-2.0-flash`        | `GEMINI_API_KEY`    |
+| `claude`            | `claude-sonnet-4-5`       | `ANTHROPIC_API_KEY` |
 
-### Claude (default)
 
-```bash
-export ANTHROPIC_API_KEY=sk-ant-...
-python main.py sales.xlsx
-```
-
-### Meta Llama API
-
-```bash
-export LLAMA_API_KEY=<your-meta-llama-api-key>
-python main.py sales.xlsx --agent llama
-```
-
-The default model is `Llama-4-Maverick-17B-128E-Instruct-FP8`. Override with:
-
-```bash
-export LLAMA_MODEL=Llama-3.3-70B-Instruct
-```
+Override a model with `LLAMA_MODEL` / `GROQ_MODEL` / `GEMINI_MODEL`.
 
 ## Usage
 
-Pass one or more Excel or CSV files as arguments:
-
 ```bash
-python main.py sales.xlsx
-python main.py sales.xlsx headcount.csv --agent llama
-python main.py data.csv
+# Interactive session (one or more files)
+python main.py sales.xlsx headcount.csv
+python main.py data.csv --agent claude
+
+# One-shot: answer a single question and exit
+python main.py data.csv -q "total revenue by region?"
+
+# No files: let the agent find them
+python main.py -q "find sales files in ./data"
 ```
 
-CellSense will load the files and drop into an interactive session:
+In the interactive session, ask questions in plain English. Slash commands:
+`/help`, `/files`, `/clear`, `/exit`.
 
-```
-cellsense > What is total revenue by region?
-cellsense > Which products have the highest return rate?
-cellsense > Join sales and headcount by department and show average revenue per employee
-```
+## Supported files
 
-### Example: Financial report
+- `.xlsx` / `.xls` — Excel (multi-sheet)
+- `.csv` — UTF-8 or latin-1
 
-```bash
-python main.py Financial_Report.xlsx --agent llama
-```
+Requires Python 3.11+.
 
-```
-cellsense > What is the total revenue?
-# The total revenue for the 6 months ended March 29, 2025 is $219,659 million.
-# Sources: Financial_Report.xlsx [Sheet: CONDENSED CONSOLIDATED STATEMEN, Rows: 1, 20, 23]
-
-cellsense > What are the main segments and their revenue breakdown?
-# Segment 1: $92,963 million
-# Segment 2: $58,315 million
-# Segment 3: $34,515 million
-# Segment 4: $16,285 million
-# Segment 5: $17,581 million
-# Sources: Financial_Report.xlsx [Sheet: Segment Information and Geogr_3, Rows: 2, 6, 10, 14, 18, 22]
-```
-
-### Slash commands
-
-| Command | Description |
-|---|---|
-| `/help` | Show available commands |
-| `/files` | List loaded files, sheets, and columns |
-| `/clear` | Clear the screen |
-| `/exit` | End the session |
-
-## Supported file types
-
-- `.xlsx` / `.xls` — Excel (multi-sheet supported)
-- `.csv` — comma-separated values (UTF-8 and latin-1 encoding)
-
-## Requirements
-
-- Python 3.11+
-- An [Anthropic API key](https://console.anthropic.com/) and/or a [Meta Llama API key](https://llama.meta.com/)

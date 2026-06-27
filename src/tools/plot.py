@@ -1,8 +1,8 @@
-"""Visualization tool for CellSense.
+"""plot tool: schema + handler.
 
-Generates charts from loaded file data and saves them as PNG files under
-the output/ directory. The agent calls this tool the same way it calls
-filter_rows or aggregate — by specifying the file, columns, and chart type.
+Generates charts from loaded file data and saves them as PNG files under the
+output/ directory. The agent calls this tool the same way it calls filter_rows
+or aggregate — by specifying the file, columns, and chart type.
 """
 from __future__ import annotations
 
@@ -13,7 +13,7 @@ from pathlib import Path
 from typing import Any, Dict
 
 from src.data import FileData
-from src.tools import ToolResult, _get_sheet
+from src.types import ToolResult, _get_sheet
 from src.utils.citations import Citation
 
 matplotlib.use("Agg")  # non-interactive backend; must be set before pyplot import
@@ -23,7 +23,7 @@ OUTPUT_DIR = Path("output")
 
 # ── Schema ─────────────────────────────────────────────────────────────────────
 
-PLOT_SCHEMA: Dict[str, Any] = {
+SCHEMA: Dict[str, Any] = {
     "name": "plot",
     "description": (
         "Generate a chart from file data and save it as a PNG. "
@@ -82,7 +82,7 @@ PLOT_SCHEMA: Dict[str, Any] = {
 
 # ── Handler ────────────────────────────────────────────────────────────────────
 
-def handle_plot(inputs: Dict[str, Any], file_data: Dict[str, FileData]) -> ToolResult:
+def handle(inputs: Dict[str, Any], file_data: Dict[str, FileData]) -> ToolResult:
     filename = inputs["filename"]
     sheet_name = inputs["sheet_name"]
     chart_type = inputs["chart_type"]
@@ -95,11 +95,9 @@ def handle_plot(inputs: Dict[str, Any], file_data: Dict[str, FileData]) -> ToolR
 
     df = _get_sheet(file_data, filename, sheet_name)
 
-    # Optional filter
     if query:
         df = df.query(query)
 
-    # Optional groupby aggregation
     if group_by and y_col:
         df = df.groupby(group_by)[y_col].agg(agg_func).reset_index()
         df.columns = [group_by, f"{agg_func}_{y_col}"]
@@ -108,7 +106,6 @@ def handle_plot(inputs: Dict[str, Any], file_data: Dict[str, FileData]) -> ToolR
 
     _validate_columns(df, x_col, y_col, chart_type)
 
-    # Build chart
     fig, ax = plt.subplots(figsize=(8, 5))
     _draw(ax, df, chart_type, x_col, y_col)
 
@@ -116,7 +113,6 @@ def handle_plot(inputs: Dict[str, Any], file_data: Dict[str, FileData]) -> ToolR
     ax.set_title(chart_title, fontsize=13, pad=12)
     fig.tight_layout()
 
-    # Save
     OUTPUT_DIR.mkdir(exist_ok=True)
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     out_path = OUTPUT_DIR / f"plot_{timestamp}.png"
@@ -134,50 +130,30 @@ def handle_plot(inputs: Dict[str, Any], file_data: Dict[str, FileData]) -> ToolR
 
 # ── Drawing helpers ────────────────────────────────────────────────────────────
 
-def _draw(
-    ax: plt.Axes,
-    df: pd.DataFrame,
-    chart_type: str,
-    x_col: str,
-    y_col: str | None,
-) -> None:
+def _draw(ax: plt.Axes, df: pd.DataFrame, chart_type: str, x_col: str, y_col: str | None) -> None:
     if chart_type == "bar":
         ax.bar(df[x_col].astype(str), df[y_col])
         ax.set_xlabel(x_col)
         ax.set_ylabel(y_col)
         plt.xticks(rotation=30, ha="right")
-
     elif chart_type == "line":
         ax.plot(df[x_col], df[y_col], marker="o")
         ax.set_xlabel(x_col)
         ax.set_ylabel(y_col)
-
     elif chart_type == "scatter":
         ax.scatter(df[x_col], df[y_col], alpha=0.7)
         ax.set_xlabel(x_col)
         ax.set_ylabel(y_col)
-
     elif chart_type == "histogram":
         ax.hist(df[x_col], bins="auto", edgecolor="white")
         ax.set_xlabel(x_col)
         ax.set_ylabel("Count")
-
     elif chart_type == "pie":
-        ax.pie(
-            df[y_col],
-            labels=df[x_col].astype(str),
-            autopct="%1.1f%%",
-            startangle=140,
-        )
+        ax.pie(df[y_col], labels=df[x_col].astype(str), autopct="%1.1f%%", startangle=140)
         ax.axis("equal")
 
 
-def _validate_columns(
-    df: pd.DataFrame,
-    x_col: str,
-    y_col: str | None,
-    chart_type: str,
-) -> None:
+def _validate_columns(df: pd.DataFrame, x_col: str, y_col: str | None, chart_type: str) -> None:
     if x_col not in df.columns:
         raise ValueError(f"Column '{x_col}' not found. Available: {list(df.columns)}")
     if chart_type != "histogram" and y_col and y_col not in df.columns:
@@ -186,6 +162,4 @@ def _validate_columns(
 
 def _auto_title(chart_type: str, x_col: str, y_col: str | None, filename: str) -> str:
     base = filename.rsplit(".", 1)[0]
-    if y_col:
-        return f"{y_col} by {x_col} ({base})"
-    return f"{x_col} distribution ({base})"
+    return f"{y_col} by {x_col} ({base})" if y_col else f"{x_col} distribution ({base})"

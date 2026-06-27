@@ -1,14 +1,7 @@
-"""MCP filesystem tools for CellSense.
+"""find_files tool: schema + handler.
 
-Exposes two tools the agent can call during a conversation:
-
-  list_directory  — list files and subdirectories at a given path
-  find_files      — find spreadsheet files matching a pattern, then load
-                    them into file_data so all other tools can use them
-
-These are registered in TOOL_HANDLERS like any other tool. The agent uses
-them when the user hasn't provided explicit file paths at startup, or when
-they ask to "look in" a different directory.
+Searches for spreadsheet files under a directory, loads matches into the shared
+file_data dict, and reports their schemas so the agent can immediately query them.
 """
 from __future__ import annotations
 
@@ -18,33 +11,11 @@ from typing import Any, Dict
 
 import pandas as pd
 
-from src.data import FileData, load_files
-from src.tools import ToolResult
+from src.data import FileData, SUPPORTED_EXTENSIONS, load_files
+from src.types import ToolResult
 from src.utils.citations import Citation
 
-SUPPORTED_EXTENSIONS = {".xlsx", ".xls", ".csv"}
-
-# ── Schemas ────────────────────────────────────────────────────────────────────
-
-LIST_DIRECTORY_SCHEMA: Dict[str, Any] = {
-    "name": "list_directory",
-    "description": (
-        "List files and subdirectories at a given path. "
-        "Use this to explore the filesystem before deciding which files to load."
-    ),
-    "input_schema": {
-        "type": "object",
-        "properties": {
-            "path": {
-                "type": "string",
-                "description": "Directory path to list. Defaults to current working directory.",
-            },
-        },
-        "required": [],
-    },
-}
-
-FIND_FILES_SCHEMA: Dict[str, Any] = {
+SCHEMA: Dict[str, Any] = {
     "name": "find_files",
     "description": (
         "Search for spreadsheet files (.xlsx, .xls, .csv) under a directory, "
@@ -75,32 +46,8 @@ FIND_FILES_SCHEMA: Dict[str, Any] = {
     },
 }
 
-MCP_SCHEMAS = [LIST_DIRECTORY_SCHEMA, FIND_FILES_SCHEMA]
 
-
-# ── Handlers ───────────────────────────────────────────────────────────────────
-
-def handle_list_directory(inputs: Dict[str, Any], file_data: Dict[str, FileData]) -> ToolResult:
-    root = Path(inputs.get("path") or ".").expanduser().resolve()
-
-    if not root.exists():
-        raise ValueError(f"Path does not exist: {root}")
-    if not root.is_dir():
-        raise ValueError(f"Not a directory: {root}")
-
-    entries = sorted(root.iterdir(), key=lambda p: (p.is_file(), p.name.lower()))
-    rows = []
-    for entry in entries:
-        kind = "file" if entry.is_file() else "dir"
-        spreadsheet = "yes" if entry.suffix.lower() in SUPPORTED_EXTENSIONS else ""
-        rows.append({"name": entry.name, "type": kind, "spreadsheet": spreadsheet})
-
-    df = pd.DataFrame(rows)
-    summary = f"list_directory: {root}  ({len(rows)} entries)"
-    return ToolResult(data=df, citations=[], summary=summary)
-
-
-def handle_find_files(inputs: Dict[str, Any], file_data: Dict[str, FileData]) -> ToolResult:
+def handle(inputs: Dict[str, Any], file_data: Dict[str, FileData]) -> ToolResult:
     root = Path(inputs.get("path") or ".").expanduser().resolve()
     pattern = inputs.get("pattern") or "*"
     recursive = bool(inputs.get("recursive", False))

@@ -25,18 +25,13 @@ from mcp.server import Server
 from mcp.server.stdio import stdio_server
 from mcp.types import TextContent, Tool
 
-from src.mcp import (
-    FIND_FILES_SCHEMA,
-    LIST_DIRECTORY_SCHEMA,
-    handle_find_files,
-    handle_list_directory,
-)
+from src.tools import find_files, list_directory
 
 app = Server("cellsense-filesystem")
 
 _TOOL_MAP = {
-    "list_directory": handle_list_directory,
-    "find_files": handle_find_files,
+    "list_directory": list_directory.handle,
+    "find_files": find_files.handle,
 }
 
 
@@ -48,7 +43,7 @@ async def list_tools() -> list[Tool]:
             description=s["description"],
             inputSchema=s["input_schema"],
         )
-        for s in [LIST_DIRECTORY_SCHEMA, FIND_FILES_SCHEMA]
+        for s in [list_directory.SCHEMA, find_files.SCHEMA]
     ]
 
 

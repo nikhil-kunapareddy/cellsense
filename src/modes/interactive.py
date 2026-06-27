@@ -1,9 +1,9 @@
-"""Interactive REPL: banner, prompt, slash commands, rich UI."""
+"""Interactive REPL mode: banner, prompt, slash commands, rich UI."""
 from __future__ import annotations
 
 from typing import Callable, Dict, List
 
-from rich.console import Console
+from rich.console import Console, Group
 from rich.markdown import Markdown
 from rich.panel import Panel
 from rich.rule import Rule
@@ -11,6 +11,7 @@ from rich.text import Text
 
 from src.data import FileData
 from src.utils.citations import format_citations
+from src.utils.classifier import classify_file
 from src.utils.context_builder import build_context
 
 # Enable basic readline history on platforms that support it
@@ -107,11 +108,6 @@ def _handle_question(
 
     citation_str = format_citations(citations)
 
-    # Render the answer as Markdown, then append the citation line as a
-    # separate Rich-markup Text so [dim] is styled rather than literal.
-    from rich.text import Text
-    from rich.console import Group
-
     md = Markdown(answer)
     renderables = [md]
     if citation_str and citation_str not in answer:
@@ -153,14 +149,16 @@ def _draw_banner(file_data: Dict[str, FileData], agent_label: str) -> None:
     console.print()
 
     for filename, fd in file_data.items():
+        category = classify_file(fd)
         for sheet_name, df in fd.sheets.items():
             shape = f"[dim]{len(df):,} rows × {len(df.columns)} cols[/dim]"
+            cat_badge = f"[dim magenta][{category}][/dim magenta]"
             if fd.file_type == "csv":
-                console.print(f"  [green]✓[/green]  [bold]{filename}[/bold]  {shape}")
+                console.print(f"  [green]✓[/green]  [bold]{filename}[/bold]  {shape}  {cat_badge}")
             else:
                 console.print(
                     f"  [green]✓[/green]  [bold]{filename}[/bold]"
-                    f"  [dim cyan][{sheet_name}][/dim cyan]  {shape}"
+                    f"  [dim cyan][{sheet_name}][/dim cyan]  {shape}  {cat_badge}"
                 )
 
     console.print()
@@ -188,10 +186,11 @@ def _draw_files(file_data: Dict[str, FileData]) -> None:
             lines.append(f"  [dim]Columns:[/dim] {preview}")
             lines.append("")
 
+        category = classify_file(fd)
         console.print(
             Panel(
                 "\n".join(lines).rstrip(),
-                title=f"[bold cyan]{filename}[/bold cyan]  [dim]({fd.file_type})[/dim]",
+                title=f"[bold cyan]{filename}[/bold cyan]  [dim]({fd.file_type})[/dim]  [magenta][{category}][/magenta]",
                 border_style="cyan",
                 padding=(0, 1),
             )

@@ -1,4 +1,4 @@
-"""Shared orchestration logic for all CellSense agents.
+"""Shared orchestration logic and constants for all CellSense agents.
 
 Every agent backend (Claude, Llama, …) plugs in two callbacks:
 
@@ -26,8 +26,32 @@ from dataclasses import dataclass
 from typing import Callable, Dict, List
 
 from src.data import FileData
+from src.types import ToolResult
+from src.tools.registry import TOOL_HANDLERS
 from src.utils.citations import Citation, merge_citations
-from src.guardrails import check_relevance, rejection_message
+from src.core.guardrails import check_relevance, rejection_message
+
+# ── Shared constants ───────────────────────────────────────────────────────────
+
+MAX_TOOL_ROUNDS = 8
+
+SYSTEM_PROMPT = """\
+You are CellSense, an expert data analyst assistant embedded in a CLI tool.
+The user has loaded one or more Excel/CSV files. A compressed summary of those files \
+is provided below. Answer the user's questions by calling the available tools to filter, \
+aggregate, join, or find data as needed.
+
+Rules:
+- Always use tool calls to retrieve actual data before answering — do not hallucinate numbers.
+- After receiving tool results, synthesise a clear, concise answer.
+- Every answer MUST end with a citation block in exactly this format:
+  Sources: <filename> [Sheet: <sheet>, Rows: <i, j, ...>] | <filename2> [Rows: ...]
+  (For CSV files omit the Sheet field.)
+- If a question cannot be answered with the available data, say so clearly.
+
+File context:
+{context}
+"""
 
 # ── Types ──────────────────────────────────────────────────────────────────────
 
@@ -69,6 +93,19 @@ do not repeat raw numbers already explained. End with a combined citation block:
 """
 
 
+# ── Shared tool executor ───────────────────────────────────────────────────────
+
+def execute_tool(name: str, inputs: dict, file_data: Dict[str, FileData]) -> ToolResult | str:
+    """Dispatch a tool call to the appropriate handler."""
+    handler = TOOL_HANDLERS.get(name)
+    if handler is None:
+        return f"Error: unknown tool {name!r}"
+    try:
+        return handler(inputs, file_data)
+    except Exception as exc:
+        return f"Tool error ({name}): {exc}"
+
+
 # ── Public entry point ─────────────────────────────────────────────────────────
 
 def orchestrate(
@@ -96,8 +133,7 @@ def orchestrate(
         return worker_fn(question, file_data, context, history)
 
     # Fan out workers in parallel
-    ordered: list[tuple[_SubTask, str, List[Citation]]] = [
-        None] * len(subtasks)  # type: ignore[list-item]
+    ordered: list[tuple[_SubTask, str, List[Citation]]] = [None] * len(subtasks)  # type: ignore[list-item]
     with concurrent.futures.ThreadPoolExecutor(max_workers=len(subtasks)) as pool:
         future_to_idx = {
             pool.submit(worker_fn, st.question, file_data, context, []): i
@@ -133,7 +169,6 @@ def _plan(question: str, context: str, llm_call: LLMCallFn) -> list[_SubTask]:
         items = json.loads(raw)
         return [_SubTask(id=item["id"], question=item["question"]) for item in items]
     except Exception:
-        # Any failure (API error, bad JSON, missing keys) → treat as single task
         return [_SubTask(id="t1", question=question)]
 
 
@@ -147,7 +182,6 @@ def _synthesize(
         for st, answer, _ in sub_results
     )
     all_citations = [c for _, _, cits in sub_results for c in cits]
-
     user_msg = {"role": "user", "content": _SYNTHESIZER_USER.format(
         question=original_question,
         sub_results=sub_results_text,

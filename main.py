@@ -16,6 +16,12 @@ SUPPORTED_EXTENSIONS = {".xlsx", ".xls", ".csv"}
 
 
 def _parse_args():
+    """
+    This function sets up command line arguments for the program.
+    1. Defines what inputs the program expects.
+    2. Parses user input.
+    3. Returns the parsed arguments.
+    """
     parser = argparse.ArgumentParser(
         prog="cellsense",
         description="Ask natural language questions about your Excel and CSV files.",
@@ -23,7 +29,8 @@ def _parse_args():
         epilog=(
             "Examples:\n"
             "  python main.py sales.xlsx\n"
-            "  python main.py sales.xlsx headcount.csv --agent llama"
+            "  python main.py sales.xlsx headcount.csv --agent llama\n"
+            "  python main.py sales.xlsx -q \"total revenue by region?\""
         ),
     )
     parser.add_argument(
@@ -37,11 +44,20 @@ def _parse_args():
     )
     parser.add_argument(
         "--agent",
-        choices=["claude", "llama", "groq"],
+        choices=["claude", "llama", "groq", "gemini"],
         default="llama",
         help=(
-            "LLM backend: 'claude' (Anthropic), 'llama' (Meta Llama API, default), "
-            "or 'groq' (Groq)."
+            "LLM backend: 'claude' (Anthropic), 'llama' (Meta, default), "
+            "'groq' (Groq), or 'gemini' (Google)."
+        ),
+    )
+    parser.add_argument(
+        "-q", "--query",
+        metavar="QUESTION",
+        default=None,
+        help=(
+            "Ask a single question and exit (non-interactive print mode). "
+            "If omitted, CellSense starts an interactive REPL."
         ),
     )
     return parser.parse_args()
@@ -64,7 +80,6 @@ def _resolve_paths(raw_files: list[str]) -> list[Path]:
             errors.append(f"Unsupported file type '{p.suffix}': {raw}")
         else:
             paths.append(p)
-    # Fail after checking every file so the user gets a full error list at once.
     if errors:
         for e in errors:
             print(f"error: {e}", file=sys.stderr)
@@ -73,14 +88,7 @@ def _resolve_paths(raw_files: list[str]) -> list[Path]:
 
 
 def _load_agent(choice: str):
-    """Select the LLM backend and return its entry points for the REPL.
-
-    ``choice`` is ``"claude"`` (Anthropic) or ``"llama"`` (Meta). Each backend
-    requires its API key in the environment; if missing, prints a hint to stderr
-    and exits with code 1. Otherwise imports only that agent module and returns
-    ``(ask_question, AGENT_LABEL)`` for ``run_repl``.
-    """
-    # Import inside each branch so the unused backend's dependencies are not loaded.
+    """Select the LLM backend and return (ask_fn, agent_label) for the REPL."""
     if choice == "claude":
         if not os.environ.get("ANTHROPIC_API_KEY"):
             print(
@@ -89,30 +97,19 @@ def _load_agent(choice: str):
                 file=sys.stderr,
             )
             sys.exit(1)
-        from src.agents import claude
-        return claude.ask_question, claude.AGENT_LABEL
+        from src.core.agents.claude import ask_question, AGENT_LABEL
+        return ask_question, AGENT_LABEL
 
-    elif choice == "groq":
-        if not os.environ.get("GROQ_API_KEY"):
-            print(
-                "error: GROQ_API_KEY is not set.\n"
-                "  export GROQ_API_KEY=gsk_...",
-                file=sys.stderr,
-            )
-            sys.exit(1)
-        from src.agents import groq
-        return groq.ask_question, groq.AGENT_LABEL
+    from src.core.agents.openai_compat import GROQ, GEMINI, LLAMA, make_ask_fn, get_label
 
-    else:  # llama
-        if not os.environ.get("LLAMA_API_KEY"):
-            print(
-                "error: LLAMA_API_KEY is not set.\n"
-                "  export LLAMA_API_KEY=<your-meta-llama-api-key>",
-                file=sys.stderr,
-            )
-            sys.exit(1)
-        from src.agents import llama
-        return llama.ask_question, llama.AGENT_LABEL
+    configs = {"groq": GROQ, "gemini": GEMINI, "llama": LLAMA}
+    config = configs[choice]
+
+    if not os.environ.get(config.api_key_env):
+        print(f"error: {config.api_key_env} is not set.", file=sys.stderr)
+        sys.exit(1)
+
+    return make_ask_fn(config), get_label(config)
 
 
 def main() -> None:
@@ -121,7 +118,6 @@ def main() -> None:
     ask_fn, agent_label = _load_agent(args.agent)
 
     from src.data import load_files
-    from src.repl import run_repl
 
     file_data: dict = {}
     if paths:
@@ -131,6 +127,11 @@ def main() -> None:
             print(f"error loading files: {exc}", file=sys.stderr)
             sys.exit(1)
 
+    if args.query:
+        from src.modes.print import run_print
+        sys.exit(run_print(file_data, ask_fn, agent_label, args.query))
+
+    from src.modes.interactive import run_repl
     run_repl(file_data, ask_fn, agent_label)
 
 
