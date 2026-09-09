@@ -1,14 +1,15 @@
 # Python
 __pycache__/
-*.pyc
-*.pyo
-*.pyd
+*.py[cod]
 *.egg-info/
 dist/
 build/
 .eggs/
 
-# Virtual environment
+# Virtual environments
+# NOTE: keep venvs OUTSIDE this repo. ~/Documents is iCloud-synced on some machines,
+# which evicts site-packages into unreadable "dataless" placeholders that hang on
+# import. See docs/DEVELOPMENT.md. Recommended: ~/.venvs/cellsense
 .venv/
 venv/
 env/
@@ -16,13 +17,28 @@ env/
 # Environment / secrets
 .env
 .env.*
+!.env.example
+
+# CellSense runtime state
+.cellsense/
+output/
+*.sqlite
+*.sqlite-journal
+
+# Tooling caches
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.coverage
+htmlcov/
+coverage.xml
 
 # macOS
 .DS_Store
 
-# Personal / generated
+# Personal / generated data. Regenerate the samples with:
+#   python scripts/make_sample_data.py
 data/
-output/
 notes.txt
 notebooks/
 

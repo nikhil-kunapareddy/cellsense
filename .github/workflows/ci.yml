@@ -1,0 +1,56 @@
+name: CI
+
+# No job in this workflow requires a provider API key, and none may run
+# `live`-marked tests (those hit real provider APIs and cost money) --
+# `pytest -m "not live"` is the only test invocation here, deliberately.
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: test (py${{ matrix.python-version }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.11", "3.12", "3.13"]
+
+    steps:
+      - name: Check out the repo
+        uses: actions/checkout@v4
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+          cache-dependency-path: pyproject.toml
+
+      - name: Install cellsense (all providers + dev tooling)
+        run: pip install -e '.[all,dev]'
+
+      - name: ruff check
+        run: ruff check cellsense tests scripts
+
+      - name: ruff format --check
+        run: ruff format --check cellsense tests scripts
+
+      - name: mypy
+        run: mypy
+
+      - name: pytest (excludes live provider tests; no API keys required or used)
+        run: pytest -m "not live" --cov --cov-report=term-missing --cov-report=xml
+
+      - name: Upload coverage report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-py${{ matrix.python-version }}
+          path: coverage.xml
+          if-no-files-found: ignore
