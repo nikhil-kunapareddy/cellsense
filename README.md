@@ -96,7 +96,7 @@ reference.
 | --- | --- | --- | --- |
 | **Groq** | `openai/gpt-oss-120b` | `GROQ_API_KEY` | confirmed working end-to-end |
 | **Google Gemini** | `gemini-2.5-flash` | `GEMINI_API_KEY` | confirmed working end-to-end |
-| **Anthropic** | `claude-sonnet-5` | `ANTHROPIC_API_KEY` | implemented, unverified here -- no key available |
+| **Anthropic** | `claude-opus-5` | `ANTHROPIC_API_KEY` | implemented; set a key and run `pytest -m live` to confirm |
 | **OpenAI** | `gpt-4o` | `OPENAI_API_KEY` | implemented, unverified here -- no key available |
 | **Llama** (bring-your-own host) | `Llama-3.3-70B-Instruct` | `LLAMA_API_KEY` + `LLAMA_BASE_URL` | implemented, unverified here -- no third-party host configured |
 
