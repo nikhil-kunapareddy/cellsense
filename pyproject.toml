@@ -105,7 +105,12 @@ known-first-party = ["cellsense"]
 # ── Types ──────────────────────────────────────────────────────────────────────
 
 [tool.mypy]
-python_version = "3.11"
+# Deliberately NOT pinned to a python_version. Pinning to "3.11" while running
+# under a newer interpreter makes mypy parse that interpreter's stdlib and
+# third-party stubs with 3.11 syntax rules -- numpy's stubs use 3.12+ `type`
+# statements, which failed CI on 3.12/3.13 with a syntax error inside numpy
+# itself. Letting mypy infer from the running interpreter means each CI matrix
+# leg type-checks against its own version, which is stricter, not looser.
 files = ["cellsense"]
 strict = false
 warn_unused_ignores = true

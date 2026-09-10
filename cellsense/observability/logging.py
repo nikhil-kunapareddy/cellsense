@@ -131,7 +131,11 @@ def setup_logging(config: Config, *, debug: bool = False) -> logging.Logger:
 
     log_dir = Path(config.telemetry.log_dir).expanduser()
     log_dir.mkdir(parents=True, exist_ok=True)
-    file_path = log_dir / f"cellsense-{datetime.now().strftime('%Y-%m-%d')}.jsonl"
+    # UTC, matching the "ts" field on every record. Naming the file from naive
+    # local time instead splits one UTC day's records across two files (and
+    # writes "today" into a file named for yesterday) for anyone west of UTC,
+    # which makes correlating a timestamp back to a file needlessly confusing.
+    file_path = log_dir / f"cellsense-{datetime.now(UTC).strftime('%Y-%m-%d')}.jsonl"
 
     # FileHandler.emit() is protected by a per-handler lock, so concurrent writes
     # from graph fan-out worker threads interleave safely at the line level.

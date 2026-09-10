@@ -267,3 +267,32 @@ def test_bind_unwinds_even_if_the_block_raises(tmp_path) -> None:
     inside, after = (json.loads(line) for line in lines)
     assert inside["thread_id"] == "t1"
     assert "thread_id" not in after
+
+
+@pytest.mark.parametrize("tz", ["Etc/GMT+12", "Pacific/Kiritimati"], ids=["utc-12", "utc+14"])
+def test_log_filename_uses_utc_not_local_time(tmp_path, monkeypatch, tz: str) -> None:
+    """The log file is named for the UTC date, matching the UTC ``ts`` on every
+    record it contains.
+
+    Regression guard. The filename was originally built from a naive
+    ``datetime.now()``, so between 17:00 and midnight Pacific the process wrote
+    UTC-stamped records into a file named for the previous day. The existing
+    tests only caught it because they happened to run during those hours --
+    they were green the rest of the day.
+
+    These two offsets are 26 hours apart, so whatever the current instant is, at
+    least one of them puts the local date on a different day from UTC. That
+    makes this deterministic at any time of day rather than only near midnight.
+    """
+    import time
+
+    monkeypatch.setenv("TZ", tz)
+    time.tzset()
+    try:
+        setup_logging(_make_config(tmp_path)).info("hello")
+        expected = f"cellsense-{datetime.now(UTC).strftime('%Y-%m-%d')}.jsonl"
+        written = sorted(p.name for p in (tmp_path / "logs").iterdir())
+        assert written == [expected], f"under TZ={tz}, expected {expected}, got {written}"
+    finally:
+        monkeypatch.undo()
+        time.tzset()
