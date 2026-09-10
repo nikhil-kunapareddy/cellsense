@@ -93,3 +93,65 @@ def test_make_console_no_color_flag_follows_theme_mode(monkeypatch) -> None:
 def test_make_console_disables_markup_highlighting() -> None:
     console = make_console(resolve_theme("dark"))
     assert console._highlight is False
+
+
+class TestExcelPalette:
+    """Pins the accent colours to Microsoft Excel's brand greens, and pins the
+    contrast reasoning behind splitting them across light and dark.
+    """
+
+    ACCENT_TOKENS = ("banner.title", "prompt", "plan.title", "tool.name", "success")
+
+    @staticmethod
+    def _hexes(styles: dict[str, str]) -> set[str]:
+        return {
+            part.upper()
+            for style in styles.values()
+            for part in style.split()
+            if part.startswith("#")
+        }
+
+    def test_dark_accents_use_the_two_lighter_excel_greens(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.delenv("NO_COLOR", raising=False)
+        theme = resolve_theme("dark")
+        for token in self.ACCENT_TOKENS:
+            assert theme.style(token).split()[-1].upper() in {"#33C481", "#21A366"}, token
+
+    def test_light_accents_use_the_two_darker_excel_greens(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.delenv("NO_COLOR", raising=False)
+        theme = resolve_theme("light")
+        for token in self.ACCENT_TOKENS:
+            assert theme.style(token).split()[-1].upper() in {"#107C41", "#185C37"}, token
+
+    @pytest.mark.parametrize("mode", ["dark", "light"])
+    def test_the_light_only_greens_never_leak_into_dark_and_vice_versa(
+        self, mode: str, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """#185C37 is 2.08:1 on a dark terminal and #33C481 is 2.25:1 on a light
+        one -- each is effectively invisible on the other background, so a token
+        borrowing across modes is a real legibility bug, not a style opinion.
+        """
+        monkeypatch.delenv("NO_COLOR", raising=False)
+        forbidden = {"#185C37", "#107C41"} if mode == "dark" else {"#33C481", "#21A366"}
+        assert not (self._hexes(resolve_theme(mode).styles) & forbidden)
+
+    @pytest.mark.parametrize("mode", ["dark", "light"])
+    def test_errors_and_warnings_are_never_green(
+        self, mode: str, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Failure states must stay distinguishable from the accent at a glance."""
+        monkeypatch.delenv("NO_COLOR", raising=False)
+        theme = resolve_theme(mode)
+        greens = {"#33C481", "#21A366", "#107C41", "#185C37"}
+        for token in ("error", "tool.error", "notice.error", "warning", "notice.warn"):
+            assert not (set(theme.style(token).upper().split()) & greens), token
+
+    def test_no_color_mode_still_strips_every_excel_green(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setenv("NO_COLOR", "1")
+        assert self._hexes(resolve_theme("dark").styles) == set()

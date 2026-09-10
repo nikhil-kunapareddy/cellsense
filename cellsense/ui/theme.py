@@ -55,20 +55,48 @@ TOKENS: tuple[str, ...] = (
     "table.header",
 )
 
+# ── Palette ───────────────────────────────────────────────────────────────────
+#
+# Microsoft Excel's brand greens, taken from the Microsoft 365 Excel icon.
+# CellSense is a spreadsheet tool, so the accent colour should read as one.
+#
+# No single Excel green is legible on both a dark and a light terminal, so each
+# mode uses the tone that actually passes contrast on it. Ratios below are WCAG
+# against #1e1e1e (typical dark terminal) and #ffffff:
+#
+#   #33C481  light  icon highlight   7.43 dark / 2.25 light  -> dark mode only
+#   #21A366  mid    icon mid-tone    5.16 dark / 3.23 light  -> dark mode only
+#   #107C41  primary  M365 Excel     3.16 dark / 5.27 light  -> light mode only
+#   #185C37  darkest  icon shadow    2.08 dark / 8.00 light  -> light mode only
+#
+# Red/amber are deliberately NOT greened: errors and warnings must stay
+# distinguishable from the accent, and from each other, at a glance.
+
+EXCEL_GREEN_LIGHTEST = "#33C481"
+EXCEL_GREEN_MID = "#21A366"
+EXCEL_GREEN = "#107C41"
+EXCEL_GREEN_DARK = "#185C37"
+
+# Amber for the light palette only. Terminal "yellow" resolves to something
+# near-white on a white background (bright yellow is 1.07:1 -- effectively
+# invisible), so a warning styled "yellow" is unreadable in light mode.
+# 5.54:1 on white, and still clearly amber rather than a second green.
+AMBER_DARK = "#8A6100"
+
 _DARK: dict[str, str] = {
-    "banner.title": "bold cyan",
+    "banner.title": f"bold {EXCEL_GREEN_LIGHTEST}",
     "banner.meta": "dim",
-    "banner.rule": "cyan dim",
+    "banner.rule": f"{EXCEL_GREEN_MID} dim",
     "banner.hint": "dim",
-    "prompt": "bold green",
+    "prompt": f"bold {EXCEL_GREEN_LIGHTEST}",
     "prompt.marker": "dim",
     "muted": "dim",
     "answer.citation": "dim",
     "worker": "dim",
     "reasoning": "dim italic",
-    "plan.title": "bold",
+    "plan.title": f"bold {EXCEL_GREEN_MID}",
     "plan.item": "",
-    "tool.name": "bold cyan",
+    "tool.name": f"bold {EXCEL_GREEN_MID}",
     "tool.result": "dim",
     "tool.error": "bold red",
     "notice.info": "dim",
@@ -80,16 +108,21 @@ _DARK: dict[str, str] = {
     "approval.arg": "dim",
     "error": "bold red",
     "warning": "yellow",
-    "success": "green",
+    "success": EXCEL_GREEN_MID,
     "table.header": "bold",
 }
 
 _LIGHT: dict[str, str] = {
     **_DARK,
-    "banner.title": "bold blue",
-    "banner.rule": "blue dim",
-    "prompt": "bold dark_green",
-    "tool.name": "bold blue",
+    "banner.title": f"bold {EXCEL_GREEN}",
+    "banner.rule": f"{EXCEL_GREEN_DARK} dim",
+    "prompt": f"bold {EXCEL_GREEN}",
+    "tool.name": f"bold {EXCEL_GREEN_DARK}",
+    "plan.title": f"bold {EXCEL_GREEN}",
+    "success": EXCEL_GREEN,
+    "notice.warn": AMBER_DARK,
+    "warning": AMBER_DARK,
+    "approval.title": f"bold {AMBER_DARK}",
 }
 
 _NO_COLOR: dict[str, str] = dict.fromkeys(TOKENS, "")
