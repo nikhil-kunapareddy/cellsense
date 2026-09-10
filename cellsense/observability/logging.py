@@ -14,7 +14,7 @@ import logging
 import re
 import sys
 from collections.abc import Iterator
-from contextlib import contextmanager
+from contextlib import contextmanager, suppress
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -168,4 +168,20 @@ def bind(**fields: Any) -> Iterator[None]:
     try:
         yield
     finally:
-        _context.reset(token)
+        with suppress(ValueError):
+            # "Token was created in a different Context". A ContextVar token is
+            # only valid in the Context that produced it, and a generator body
+            # runs in whichever Context resumes it -- so a generator that
+            # suspends inside this block and is later finalized elsewhere (by
+            # the garbage collector, on another thread) unwinds here with a
+            # token from a Context we are no longer in.
+            #
+            # Nothing meaningful can be restored at that point: the Context we
+            # actually polluted isn't reachable from here, and the one we are in
+            # never had the field set. Raising is strictly worse -- this runs
+            # during finalization, where the exception can't propagate and is
+            # printed as noise ("Exception ignored in: <generator object ...>")
+            # long after the work succeeded. Callers close their generators
+            # deterministically so the normal path always resets cleanly; this
+            # is the backstop for when something doesn't.
+            _context.reset(token)

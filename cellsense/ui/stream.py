@@ -24,6 +24,7 @@ import queue
 import sys
 import threading
 import time
+from contextlib import suppress
 from typing import TYPE_CHECKING, Any, Literal
 
 from rich.console import Console, Group, RenderableType
@@ -235,6 +236,18 @@ def run_turn(
         except Exception as exc:
             event_queue.put(TurnFailed(message=f"Internal error: {exc}"))
         finally:
+            # Breaking out of the loop above leaves the generator suspended
+            # inside `Engine.stream_turn`'s `with bind(...)` block. Close it
+            # here so that block unwinds on *this* thread, in the same Context
+            # its ContextVar token was created in. Left to the garbage
+            # collector instead, it gets finalized on whatever thread happens
+            # to collect, and the mismatched `reset()` raises
+            # "ValueError: <Token ...> was created in a different Context",
+            # printed as an ignored exception some time after the answer.
+            close = getattr(events, "close", None)
+            if callable(close):
+                with suppress(Exception):  # cleanup must never mask a turn
+                    close()
             event_queue.put(_SENTINEL)
 
     pump = threading.Thread(target=_pump, daemon=True)

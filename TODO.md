@@ -56,11 +56,12 @@ Current baseline: 48 modules / 8.9k lines, 534 tests, 85% coverage, `ruff` + `my
 Coverage is 85% overall, but it is very unevenly distributed. The interactive surface is
 the least-tested part of the codebase, and it is the part users touch first.
 
-- [ ] **`ui/stream.py` — 16%** (158 of 188 statements unexecuted). This is the live status
-      line, the spinner, and **the Esc/Ctrl-C cancellation path**. Cancellation is a
-      correctness feature, not a cosmetic one, and it is essentially untested.
+- [ ] **`ui/stream.py` — 44%** (up from 16% after the generator-lifecycle tests). Still
+      uncovered: the `rich.live.Live` render loop, the spinner, and **the Esc/Ctrl-C
+      cancellation path**. Cancellation is a correctness feature, not a cosmetic one, and
+      the keyboard half of it is still untested.
 - [ ] **`ui/repl.py` — 44%.** The REPL loop, key bindings, and banner.
-- [ ] **`cli.py` — 71%** and **`ui/printer.py` — 71%.**
+- [ ] **`cli.py` — 71%.** (`ui/printer.py` is now 82%.)
 - [ ] **No end-to-end test drives a real terminal.** Consider `pyte` or
       `prompt_toolkit`'s pipe input to script a full interactive session and assert on the
       rendered screen.

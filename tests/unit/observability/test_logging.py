@@ -296,3 +296,55 @@ def test_log_filename_uses_utc_not_local_time(tmp_path, monkeypatch, tz: str) ->
     finally:
         monkeypatch.undo()
         time.tzset()
+
+
+def test_bind_survives_being_unwound_in_a_different_context() -> None:
+    """A generator that suspends inside ``bind()`` and is finalized on another
+    thread must not raise.
+
+    ContextVar tokens are only valid in the Context that created them, and a
+    generator body runs in whichever Context resumes it. ``Engine.stream_turn``
+    wraps its whole body in ``bind()`` and the UI stops iterating as soon as it
+    sees the terminal event, so the generator sits suspended until the garbage
+    collector finalizes it -- typically on a different thread. That used to
+    raise ``ValueError: <Token ...> was created in a different Context``, which
+    Python printed as "Exception ignored in: <generator object ...>" after a
+    perfectly good answer had already been rendered.
+    """
+    import threading
+
+    def suspends_inside_bind():
+        with bind(thread_id="abc"):
+            yield "first"
+            yield "second"
+
+    gen = suspends_inside_bind()
+
+    def pump() -> None:
+        for item in gen:
+            if item == "first":
+                break  # abandon it mid-block, exactly as ui/stream.py does
+
+    thread = threading.Thread(target=pump)
+    thread.start()
+    thread.join()
+    assert gen.gi_frame is not None, "precondition: generator is suspended inside bind()"
+
+    # Finalizing from *this* thread is the failure case; it must be silent.
+    gen.close()
+
+
+def test_bind_still_resets_normally_on_the_happy_path() -> None:
+    """The ValueError backstop must not turn into 'never resets'."""
+    with bind(thread_id="outer"):
+        with bind(node="inner"):
+            pass
+        after_inner = dict(_context_snapshot())
+    assert after_inner == {"thread_id": "outer"}
+    assert _context_snapshot() == {}
+
+
+def _context_snapshot() -> dict:
+    from cellsense.observability.logging import _current_context
+
+    return dict(_current_context())

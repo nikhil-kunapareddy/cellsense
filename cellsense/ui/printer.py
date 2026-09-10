@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import sys
 import threading
+from contextlib import suppress
 from typing import TYPE_CHECKING, Literal
 
 from rich.console import Console
@@ -77,6 +78,18 @@ def run_print(
         cancel.set()
         err.print(Text("Interrupted.", style=theme.style("error")))
         return 130
+    finally:
+        # The loop above runs to exhaustion on the happy path, but the Ctrl-C
+        # branch returns with the generator still suspended inside
+        # `Engine.stream_turn`'s `with bind(...)`. Close it on this thread so
+        # that block unwinds in the Context its ContextVar token came from --
+        # otherwise the garbage collector finalizes it elsewhere and the
+        # mismatched reset() prints an ignored "was created in a different
+        # Context" traceback. See ui/stream.py for the same guard.
+        close = getattr(events, "close", None)
+        if callable(close):
+            with suppress(Exception):  # cleanup must never mask a turn
+                close()
 
     if isinstance(terminal_event, TurnFinished):
         out.print(Markdown(terminal_event.answer))
